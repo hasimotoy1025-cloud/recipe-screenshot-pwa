@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { deleteItem, getItemBundle, saveItemBundle } from '../db';
 import { compressImage, formatBytes } from '../services/image';
+import { formatIngredientAmount } from '../services/ingredient';
 import { newId, type AppSettings, type ItemBundle } from '../types';
 import {
   BlobImage,
@@ -207,10 +208,7 @@ export function DetailPage({
                       {row.name}
                       {row.note && <small>{row.note}</small>}
                     </span>
-                    <b>
-                      {row.quantity}
-                      {row.unit}
-                    </b>
+                    <b dir="ltr">{formatIngredientAmount(row.quantity, row.unit)}</b>
                   </div>
                 ))}
               </div>

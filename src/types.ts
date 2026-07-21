@@ -134,7 +134,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   lastBackupAt: ''
 };
 
-export const APP_VERSION = '0.3.0';
+export const APP_VERSION = '0.3.1';
 
 export function newId(): string {
   return crypto.randomUUID();

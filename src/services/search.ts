@@ -1,5 +1,6 @@
 import MiniSearch from 'minisearch';
 import type { ItemSummary } from '../types';
+import { formatIngredientAmount } from './ingredient';
 
 interface SearchDocument {
   id: string;
@@ -37,7 +38,12 @@ function buildSearchText(item: ItemSummary): string {
     item.memo,
     item.ocrText,
     item.tags.join(' '),
-    item.ingredients.map((ingredient) => ingredient.name).join(' '),
+    item.ingredients
+      .map(
+        (ingredient) =>
+          `${ingredient.name} ${formatIngredientAmount(ingredient.quantity, ingredient.unit)}`
+      )
+      .join(' '),
     item.logs.map((log) => `${log.comment} ${log.improvementNote}`).join(' ')
   ].join(' ');
 }

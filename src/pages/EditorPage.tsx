@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { getItemBundle, saveItemBundle } from '../db';
 import { formatBytes, compressImage } from '../services/image';
+import { prepareIngredientForSave } from '../services/ingredient';
 import { extractIngredients } from '../services/ingredientParser';
 import { OcrRunner, pageSegModeLabel, variantLabel, type OcrProgress } from '../services/ocr';
 import { OCR_LINE_REVIEW_THRESHOLD } from '../services/ocrPreprocess';
@@ -400,11 +401,13 @@ export function EditorPage({
           })),
           ...otherImages
         ],
-        ingredients: ingredients.map((row, sortOrder) => ({
-          ...row,
-          itemId: itemIdRef.current,
-          sortOrder
-        })),
+        ingredients: ingredients.map((row, sortOrder) =>
+          prepareIngredientForSave({
+            ...row,
+            itemId: itemIdRef.current,
+            sortOrder
+          })
+        ),
         logs: existingLogs
       });
       localStorage.removeItem('item-draft');
@@ -897,6 +900,10 @@ export function EditorPage({
                   <label>
                     数量
                     <input
+                      dir="ltr"
+                      inputMode="text"
+                      autoCorrect="off"
+                      spellCheck={false}
                       value={row.quantity}
                       onChange={(e) => updateIngredient(row.id, 'quantity', e.target.value)}
                     />

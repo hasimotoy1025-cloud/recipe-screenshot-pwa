@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { AppSettings, ItemStatus, ItemSummary, ItemType } from '../types';
+import { formatIngredientAmount } from '../services/ingredient';
 import { searchItems } from '../services/search';
 import {
   BlobImage,
@@ -246,6 +247,22 @@ export function HomePage({
                     <span key={value}>#{value}</span>
                   ))}
                 </div>
+                {item.itemType === 'recipe' &&
+                  item.ingredients.some((ingredient) => ingredient.included) && (
+                    <div className="card-ingredients" aria-label="主な材料">
+                      {item.ingredients
+                        .filter((ingredient) => ingredient.included)
+                        .slice(0, 2)
+                        .map((ingredient) => (
+                          <span key={ingredient.id}>
+                            <span>{ingredient.name}</span>
+                            <b dir="ltr">
+                              {formatIngredientAmount(ingredient.quantity, ingredient.unit)}
+                            </b>
+                          </span>
+                        ))}
+                    </div>
+                  )}
                 <div className="card-meta">
                   <span className={`status ${item.status}`}>{STATUS_LABEL[item.status]}</span>
                   {item.latestRating ? (

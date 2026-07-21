@@ -1,5 +1,6 @@
 import type { Ingredient, OcrLineResult } from '../types';
 import { newId } from '../types';
+import { normalizeIngredientName } from './ingredient';
 import { OCR_LINE_REVIEW_THRESHOLD } from './ocrPreprocess';
 
 const SPECIAL_UNITS = ['お好みで', 'ひとつまみ', '適量', '少々', '適宜'];
@@ -24,10 +25,11 @@ const MEASURE_UNITS = [
   '束',
   '房',
   '丁',
-  '合'
+  '合',
+  '振り'
 ];
 const GROUP_NAMES = ['たれ', '衣', '下味', 'トッピング'];
-const quantityCore = String.raw`(?:\d+\/\d+|\d+(?:\.\d+)?(?:[〜～~-]\d+(?:\.\d+)?)?|[½⅓⅔¼¾])`;
+const quantityCore = String.raw`(?:\d+\s*と\s*\d+\/\d+|\d+\/\d+|\d+(?:\.\d+)?(?:[〜～~-]\d+(?:\.\d+)?)?|[½⅓⅔¼¾])`;
 const unitPattern = MEASURE_UNITS.sort((a, b) => b.length - a.length)
   .map(escapeRegExp)
   .join('|');
@@ -43,7 +45,9 @@ export interface ParsedIngredient {
 
 export function normalizeOcrText(text: string): string {
   return text
+    .replace(/：/g, '\uE000')
     .normalize('NFKC')
+    .replace(/\uE000/g, '：')
     .replace(/⁄/g, '/')
     .replace(/~/g, '～')
     .replace(
@@ -52,7 +56,7 @@ export function normalizeOcrText(text: string): string {
     )
     .replace(/(\d)\s*m1\b/gi, '$1ml')
     .replace(/小きじ/g, '小さじ')
-    .replace(/(?:[•●▪・]\uFE0E?)\s*/g, '')
+    .replace(/(^|\n)\s*(?:[•●▪・]\uFE0E?)\s*/g, '$1')
     .replace(/[\t\u3000]+/g, ' ')
     .replace(/\r/g, '');
 }
@@ -225,7 +229,7 @@ function canonicalUnit(unit: string): string {
 }
 
 function cleanName(value: string): string {
-  return value.replace(/^[\s:：\-–—]+|[\s:：\-–—]+$/g, '').trim();
+  return normalizeIngredientName(value);
 }
 
 function cleanNote(value: string): string {

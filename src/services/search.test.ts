@@ -42,6 +42,14 @@ describe('searchItems', () => {
     expect(searchItems([base], 'もも肉')).toHaveLength(1);
   });
 
+  it('表示順で整形した材料分量を検索する', () => {
+    const item = {
+      ...base,
+      ingredients: [{ ...base.ingredients[0]!, quantity: '2', unit: '大さじ' }]
+    };
+    expect(searchItems([item], '大さじ2')).toHaveLength(1);
+  });
+
   it('一致しない語を除外する', () => {
     expect(searchItems([base], 'パスタ')).toHaveLength(0);
   });
