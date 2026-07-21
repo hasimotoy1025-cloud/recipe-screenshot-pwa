@@ -1,6 +1,19 @@
 export type ItemType = 'recipe' | 'place' | 'product';
 export type ItemStatus = 'saved' | 'planned' | 'completed';
 export type ImageType = 'source' | 'completed' | 'visit' | 'purchase';
+export type OcrPreprocessMode = 'auto' | 'original' | 'inverted' | 'contrast' | 'binary';
+
+export interface CropRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface OcrLineResult {
+  text: string;
+  confidence: number;
+}
 
 export interface Item {
   id: string;
@@ -39,6 +52,8 @@ export interface Ingredient {
   sortOrder: number;
   included: boolean;
   sourceLine: string;
+  needsReview?: boolean;
+  sourceConfidence?: number;
 }
 
 export interface ExperienceLog {
@@ -56,6 +71,7 @@ export interface ExperienceLog {
 export interface AppSettings {
   imageQuality: number;
   ocrLanguage: 'jpn' | 'jpn+eng';
+  ocrPreprocessMode: OcrPreprocessMode;
   lastBackupAt: string;
 }
 
@@ -75,8 +91,15 @@ export interface ImageDraft {
   size: number;
   originalSize: number;
   convertedFromHeic: boolean;
+  crop: CropRect | null;
   ocrText: string;
   ocrStatus: 'idle' | 'running' | 'done' | 'error';
+  ocrConfidence?: number;
+  ocrLines: OcrLineResult[];
+  ocrVariant?: Exclude<OcrPreprocessMode, 'auto'> | 'grayscale';
+  ocrPageSegMode?: string;
+  ocrTriedVariants?: Array<Exclude<OcrPreprocessMode, 'auto'> | 'grayscale'>;
+  ocrDarkBackground?: boolean;
 }
 
 export interface ItemSummary extends Item {
@@ -107,10 +130,11 @@ export interface BackupData {
 export const DEFAULT_SETTINGS: AppSettings = {
   imageQuality: 0.84,
   ocrLanguage: 'jpn+eng',
+  ocrPreprocessMode: 'auto',
   lastBackupAt: ''
 };
 
-export const APP_VERSION = '0.2.0';
+export const APP_VERSION = '0.3.0';
 
 export function newId(): string {
   return crypto.randomUUID();

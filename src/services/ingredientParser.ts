@@ -1,5 +1,6 @@
-import type { Ingredient } from '../types';
+import type { Ingredient, OcrLineResult } from '../types';
 import { newId } from '../types';
+import { OCR_LINE_REVIEW_THRESHOLD } from './ocrPreprocess';
 
 const SPECIAL_UNITS = ['お好みで', 'ひとつまみ', '適量', '少々', '適宜'];
 const MEASURE_UNITS = [
@@ -56,7 +57,11 @@ export function normalizeOcrText(text: string): string {
     .replace(/\r/g, '');
 }
 
-export function extractIngredients(text: string, itemId = ''): Ingredient[] {
+export function extractIngredients(
+  text: string,
+  itemId = '',
+  lineResults: OcrLineResult[] = []
+): Ingredient[] {
   const lines = joinWrappedAmountLines(
     normalizeOcrText(text)
       .split('\n')
@@ -77,15 +82,37 @@ export function extractIngredients(text: string, itemId = ''): Ingredient[] {
     const line = header?.rest ?? originalLine;
     const parsed = parseIngredientLine(line, groupName, originalLine);
     if (!parsed) continue;
+    const sourceConfidence = findSourceConfidence(parsed.sourceLine, lineResults);
+    const suspicious = isSuspiciousIngredientName(parsed.name);
     ingredients.push({
       id: newId(),
       itemId,
       ...parsed,
       sortOrder: ingredients.length,
-      included: true
+      included: !suspicious,
+      needsReview: needsIngredientReview(parsed.name, sourceConfidence),
+      sourceConfidence
     });
   }
   return ingredients;
+}
+
+export function isSuspiciousIngredientName(name: string): boolean {
+  const compactName = name.replace(/\s/g, '');
+  const japaneseCount = (
+    compactName.match(/[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}]/gu) ?? []
+  ).length;
+  const latinDigitSymbolCount = (compactName.match(/[A-Za-z0-9_\-–—]/g) ?? []).length;
+  const meaningfulCount = japaneseCount + latinDigitSymbolCount;
+  if (latinDigitSymbolCount < 3 || meaningfulCount === 0) return false;
+  return japaneseCount === 0 || japaneseCount / meaningfulCount < 0.25;
+}
+
+export function needsIngredientReview(name: string, confidence?: number): boolean {
+  return (
+    isSuspiciousIngredientName(name) ||
+    (confidence !== undefined && confidence < OCR_LINE_REVIEW_THRESHOLD)
+  );
 }
 
 export function parseIngredientLine(
@@ -207,6 +234,20 @@ function cleanNote(value: string): string {
 
 function compact(value: string): string {
   return value.replace(/\s+/g, '');
+}
+
+function findSourceConfidence(sourceLine: string, results: OcrLineResult[]): number | undefined {
+  const normalizedSource = normalizeOcrText(sourceLine).replace(/\s+/g, ' ').trim();
+  const matches = results.filter((result) => {
+    const normalizedResult = normalizeOcrText(result.text).replace(/\s+/g, ' ').trim();
+    return (
+      normalizedResult === normalizedSource ||
+      normalizedSource.includes(normalizedResult) ||
+      normalizedResult.includes(normalizedSource)
+    );
+  });
+  if (!matches.length) return undefined;
+  return Math.min(...matches.map((result) => result.confidence));
 }
 
 function escapeRegExp(value: string): string {

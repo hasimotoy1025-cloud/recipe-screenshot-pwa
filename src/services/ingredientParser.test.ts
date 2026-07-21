@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { extractIngredients, normalizeOcrText, parseIngredientLine } from './ingredientParser';
+import {
+  extractIngredients,
+  isSuspiciousIngredientName,
+  needsIngredientReview,
+  normalizeOcrText,
+  parseIngredientLine
+} from './ingredientParser';
 
 describe('parseIngredientLine', () => {
   it.each([
@@ -68,5 +74,37 @@ describe('extractIngredients', () => {
 
   it('大さじ7のような曖昧な数字は勝手に1へ変更しない', () => {
     expect(normalizeOcrText('しょうゆ 大さじ7')).toBe('しょうゆ 大さじ7');
+  });
+
+  it('信頼度が低いOCR行から抽出した材料を要確認にする', () => {
+    const result = extractIngredients('ラード 大さじ2', 'item-1', [
+      { text: 'ラード 大さじ2', confidence: 54 }
+    ]);
+    expect(result[0]).toMatchObject({
+      name: 'ラード',
+      included: true,
+      needsReview: true,
+      sourceConfidence: 54
+    });
+  });
+
+  it.each(['S—R_KS52', 'WRY—Y—R_KEL1'])(
+    '記号・英数字中心の候補「%s」を要確認かつ保存対象外にする',
+    (line) => {
+      const result = extractIngredients(line);
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({ included: false, needsReview: true });
+      expect(isSuspiciousIngredientName(result[0]?.name ?? '')).toBe(true);
+    }
+  );
+
+  it('日本語中心の材料名を記号・英数字中心と誤判定しない', () => {
+    expect(isSuspiciousIngredientName('マルタイ棒ラーメン')).toBe(false);
+    expect(needsIngredientReview('豚バラ肉', 88)).toBe(false);
+  });
+
+  it('行信頼度70%未満だけを低信頼度として判定する', () => {
+    expect(needsIngredientReview('ラード', 69.9)).toBe(true);
+    expect(needsIngredientReview('ラード', 70)).toBe(false);
   });
 });

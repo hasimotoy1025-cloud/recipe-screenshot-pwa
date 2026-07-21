@@ -42,7 +42,12 @@ function validBackup(): BackupData {
     ],
     ingredients: [],
     experienceLogs: [],
-    settings: { imageQuality: 0.84, ocrLanguage: 'jpn+eng', lastBackupAt: '' }
+    settings: {
+      imageQuality: 0.84,
+      ocrLanguage: 'jpn+eng',
+      ocrPreprocessMode: 'auto',
+      lastBackupAt: ''
+    }
   };
 }
 

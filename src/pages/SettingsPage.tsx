@@ -176,6 +176,29 @@ export function SettingsPage({
             <option value="jpn">日本語のみ</option>
           </select>
         </div>
+        <div className="setting-row">
+          <div>
+            <b>OCR前処理</b>
+            <small>
+              「自動」は通常OCRの信頼度が低い場合だけ、反転・強調・二値化などを比較します。
+            </small>
+          </div>
+          <select
+            value={draft.ocrPreprocessMode}
+            onChange={(e) =>
+              void update({
+                ...draft,
+                ocrPreprocessMode: e.target.value as AppSettings['ocrPreprocessMode']
+              })
+            }
+          >
+            <option value="auto">自動（おすすめ）</option>
+            <option value="original">元画像</option>
+            <option value="inverted">白黒反転</option>
+            <option value="contrast">コントラスト強調</option>
+            <option value="binary">二値化</option>
+          </select>
+        </div>
       </section>
       <section className="settings-section">
         <p className="eyebrow">ABOUT</p>

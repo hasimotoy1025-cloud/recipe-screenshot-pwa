@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { getItemBundle, saveItemBundle } from '../db';
 import { formatBytes, compressImage } from '../services/image';
 import { extractIngredients } from '../services/ingredientParser';
-import { OcrRunner, type OcrProgress } from '../services/ocr';
+import { OcrRunner, pageSegModeLabel, variantLabel, type OcrProgress } from '../services/ocr';
+import { OCR_LINE_REVIEW_THRESHOLD } from '../services/ocrPreprocess';
 import {
   newId,
   type AppSettings,
@@ -11,9 +12,11 @@ import {
   type Ingredient,
   type ItemStatus,
   type ItemType,
+  type OcrPreprocessMode,
   type StoredImage
 } from '../types';
 import { Spinner, STATUS_LABEL, TYPE_LABEL } from '../components/ui';
+import { CropEditor } from '../components/CropEditor';
 
 interface FormState {
   itemType: ItemType;
@@ -60,6 +63,7 @@ export function EditorPage({
   const [loading, setLoading] = useState(Boolean(existingId));
   const [saving, setSaving] = useState(false);
   const [imageBusy, setImageBusy] = useState(false);
+  const [ocrMode, setOcrMode] = useState<OcrPreprocessMode>(settings.ocrPreprocessMode);
   const [ocrProgress, setOcrProgress] = useState<OcrProgress | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -103,8 +107,10 @@ export function EditorPage({
               size: image.blob.size,
               originalSize: image.blob.size,
               convertedFromHeic: false,
+              crop: null,
               ocrText: image.ocrText,
-              ocrStatus: image.ocrText ? 'done' : 'idle'
+              ocrStatus: image.ocrText ? 'done' : 'idle',
+              ocrLines: []
             };
           })
       );
@@ -152,8 +158,10 @@ export function EditorPage({
           size: compressed.blob.size,
           originalSize: compressed.originalSize,
           convertedFromHeic: compressed.convertedFromHeic,
+          crop: null,
           ocrText: '',
-          ocrStatus: 'idle'
+          ocrStatus: 'idle',
+          ocrLines: []
         });
       } catch (reason) {
         setError(reason instanceof Error ? reason.message : '画像を追加できませんでした。');
@@ -203,22 +211,42 @@ export function EditorPage({
     runnerRef.current = runner;
     const resultMap = new Map(images.map((image) => [image.id, image.ocrText]));
     try {
-      await runner.recognize(images, settings.ocrLanguage, setOcrProgress, (id, text) => {
-        resultMap.set(id, text);
-        setImages((current) =>
-          current.map((image) =>
-            image.id === id ? { ...image, ocrText: text, ocrStatus: 'done' } : image
-          )
-        );
-        setForm((value) => ({
-          ...value,
-          ocrText: images
-            .map((image) => resultMap.get(image.id) ?? '')
-            .filter(Boolean)
-            .join('\n\n')
-        }));
-      });
-      setNotice('OCRが完了しました。原文を確認してから材料を抽出してください。');
+      await runner.recognize(
+        images,
+        settings.ocrLanguage,
+        ocrMode,
+        setOcrProgress,
+        (id, result) => {
+          resultMap.set(id, result.text);
+          setImages((current) =>
+            current.map((image) =>
+              image.id === id
+                ? {
+                    ...image,
+                    ocrText: result.text,
+                    ocrStatus: 'done',
+                    ocrConfidence: result.confidence,
+                    ocrLines: result.lines,
+                    ocrVariant: result.variant,
+                    ocrPageSegMode: result.pageSegMode,
+                    ocrTriedVariants: result.triedVariants,
+                    ocrDarkBackground: result.darkBackground
+                  }
+                : image
+            )
+          );
+          setForm((value) => ({
+            ...value,
+            ocrText: images
+              .map((image) => resultMap.get(image.id) ?? '')
+              .filter(Boolean)
+              .join('\n\n')
+          }));
+        }
+      );
+      setNotice(
+        'OCRが完了しました。信頼度と「要確認」を見て、原文を確認してから材料を抽出してください。'
+      );
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : 'OCRに失敗しました。';
       setError(
@@ -253,7 +281,11 @@ export function EditorPage({
       !window.confirm('現在の材料一覧を、OCR原文から再抽出した内容で置き換えますか？')
     )
       return;
-    const extracted = extractIngredients(form.ocrText, itemIdRef.current);
+    const extracted = extractIngredients(
+      form.ocrText,
+      itemIdRef.current,
+      images.flatMap((image) => image.ocrLines)
+    );
     setIngredients(extracted);
     setActiveStep('ingredients');
     if (!extracted.length) setError('材料候補を抽出できませんでした。手入力で追加してください。');
@@ -262,7 +294,15 @@ export function EditorPage({
 
   function updateIngredient(id: string, field: keyof Ingredient, value: string | boolean) {
     setIngredients((current) =>
-      current.map((row) => (row.id === id ? { ...row, [field]: value } : row))
+      current.map((row) =>
+        row.id === id
+          ? {
+              ...row,
+              [field]: value,
+              ...(field !== 'included' ? { needsReview: false, sourceConfidence: undefined } : {})
+            }
+          : row
+      )
     );
   }
 
@@ -279,9 +319,30 @@ export function EditorPage({
         groupName: '',
         sortOrder: current.length,
         included: true,
-        sourceLine: ''
+        sourceLine: '',
+        needsReview: false
       }
     ]);
+  }
+
+  function updateImageCrop(id: string, crop: ImageDraft['crop']) {
+    setImages((current) =>
+      current.map((image) =>
+        image.id === id
+          ? {
+              ...image,
+              crop,
+              ocrStatus: 'idle',
+              ocrConfidence: undefined,
+              ocrLines: [],
+              ocrVariant: undefined,
+              ocrPageSegMode: undefined,
+              ocrTriedVariants: undefined,
+              ocrDarkBackground: undefined
+            }
+          : image
+      )
+    );
   }
 
   function moveIngredient(index: number, direction: -1 | 1) {
@@ -583,6 +644,25 @@ export function EditorPage({
             <b>初回のみ日本語モデルをダウンロードします</b>
             <span>読み取り処理と画像は端末内で完結します。初回OCRには通信が必要です。</span>
           </div>
+          <div className="ocr-options">
+            <label>
+              OCR前処理
+              <select
+                value={ocrMode}
+                onChange={(event) => setOcrMode(event.target.value as OcrPreprocessMode)}
+                disabled={Boolean(ocrProgress)}
+              >
+                <option value="auto">自動（おすすめ）</option>
+                <option value="original">元画像</option>
+                <option value="inverted">白黒反転</option>
+                <option value="contrast">コントラスト強調</option>
+                <option value="binary">二値化</option>
+              </select>
+            </label>
+            <p>
+              自動では通常OCRを先に行い、平均信頼度が78%未満の場合だけ追加パターンを比較します。
+            </p>
+          </div>
           {ocrProgress && (
             <div className="ocr-progress">
               <div>
@@ -599,19 +679,71 @@ export function EditorPage({
             </div>
           )}
           {images.map((image, index) => (
-            <details className="ocr-image-result" key={image.id} open={image.ocrStatus === 'done'}>
+            <details
+              className="ocr-image-result"
+              key={image.id}
+              open={image.ocrStatus === 'done' || Boolean(image.crop)}
+            >
               <summary>
                 <span>
                   {index + 1}枚目：{image.fileName}
+                  {image.crop && <em>範囲指定あり</em>}
                 </span>
                 <b>
                   {image.ocrStatus === 'done'
-                    ? '読取済み'
+                    ? image.ocrConfidence === undefined
+                      ? '手修正済み'
+                      : `信頼度 ${Math.round(image.ocrConfidence)}%`
                     : image.ocrStatus === 'error'
                       ? 'エラー'
-                      : '未読取'}
+                      : image.ocrStatus === 'running'
+                        ? '読取中'
+                        : '未読取'}
                 </b>
               </summary>
+              <CropEditor
+                imageUrl={image.previewUrl}
+                crop={image.crop}
+                label={`${index + 1}枚目`}
+                disabled={Boolean(ocrProgress)}
+                onChange={(crop) => updateImageCrop(image.id, crop)}
+              />
+              {image.ocrConfidence !== undefined && (
+                <div
+                  className={`ocr-result-meta ${
+                    image.ocrConfidence < OCR_LINE_REVIEW_THRESHOLD ? 'low-confidence' : ''
+                  }`}
+                >
+                  <b>
+                    平均信頼度 {Math.round(image.ocrConfidence)}%
+                    {image.ocrConfidence < OCR_LINE_REVIEW_THRESHOLD && <span>要確認</span>}
+                  </b>
+                  <small>
+                    採用：{image.ocrVariant ? variantLabel(image.ocrVariant) : '不明'}／
+                    {image.ocrPageSegMode ? pageSegModeLabel(image.ocrPageSegMode) : '設定不明'}
+                    {image.ocrTriedVariants && image.ocrTriedVariants.length > 1
+                      ? `（${image.ocrTriedVariants.length}候補を比較）`
+                      : ''}
+                    {image.ocrDarkBackground ? '／濃い背景を検出' : ''}
+                  </small>
+                </div>
+              )}
+              {image.ocrLines.some((line) => line.confidence < OCR_LINE_REVIEW_THRESHOLD) && (
+                <div className="ocr-low-lines">
+                  <b>信頼度が低い行</b>
+                  <ul>
+                    {image.ocrLines
+                      .filter((line) => line.confidence < OCR_LINE_REVIEW_THRESHOLD)
+                      .map((line, lineIndex) => (
+                        <li key={`${line.text}-${lineIndex}`}>
+                          <span>要確認</span>
+                          <code>{line.text}</code>
+                          <small>{Math.round(line.confidence)}%</small>
+                        </li>
+                      ))}
+                  </ul>
+                </div>
+              )}
               <textarea
                 rows={8}
                 value={image.ocrText}
@@ -620,7 +752,20 @@ export function EditorPage({
                   setImages((current) => {
                     const next = current.map((entry) =>
                       entry.id === image.id
-                        ? { ...entry, ocrText: text, ocrStatus: 'done' as const }
+                        ? {
+                            ...entry,
+                            ocrText: text,
+                            ocrStatus: 'done' as const,
+                            ocrConfidence: undefined,
+                            ocrLines: text
+                              .split('\n')
+                              .map((line) => line.trim())
+                              .filter(Boolean)
+                              .map((line) => ({ text: line, confidence: 100 })),
+                            ocrVariant: undefined,
+                            ocrPageSegMode: undefined,
+                            ocrTriedVariants: undefined
+                          }
                         : entry
                     );
                     setForm((value) => ({
@@ -694,16 +839,25 @@ export function EditorPage({
           </div>
           <div className="ingredient-editor-list">
             {ingredients.map((row, index) => (
-              <article key={row.id} className={!row.included ? 'excluded' : ''}>
+              <article
+                key={row.id}
+                className={`${!row.included ? 'excluded' : ''} ${row.needsReview ? 'requires-review' : ''}`}
+              >
                 <div className="ingredient-row-head">
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={row.included}
-                      onChange={(e) => updateIngredient(row.id, 'included', e.target.checked)}
-                    />{' '}
-                    保存対象
-                  </label>
+                  <div className="ingredient-review-state">
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={row.included}
+                        onChange={(e) => updateIngredient(row.id, 'included', e.target.checked)}
+                      />{' '}
+                      保存対象
+                    </label>
+                    {row.needsReview && <b>要確認</b>}
+                    {row.sourceConfidence !== undefined && (
+                      <small>OCR {Math.round(row.sourceConfidence)}%</small>
+                    )}
+                  </div>
                   <div>
                     <button
                       type="button"
