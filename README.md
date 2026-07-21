@@ -1,0 +1,258 @@
+# おいしい記録帳 — iPhone／iPad mini向けレシピ・体験管理PWA
+
+Webサイト、YouTube、SNSなどのレシピ画面をスクリーンショットで保存し、日本語OCRから材料候補を抽出して、確認・修正してから記録できる個人利用向けWebアプリです。
+
+主な利用環境は **iPhoneとiPad miniのSafari（iOS／iPadOS 17以降）** です。GitHub Pagesへ公開後、Safariの「ホーム画面に追加」から通常のアプリに近い形で利用します。
+
+> [!IMPORTANT]
+> データは端末ごとに保存されます。iPhoneとiPad miniのデータは自動同期されません。同じApple Accountや同じGitHub Pages URLを使っても同期されないため、別端末へ移す場合はZIPバックアップを使用してください。
+
+## 主な機能
+
+- iPhone／iPadの写真アプリからスクリーンショットを最大5枚まとめて選択
+- iPhone／iPadのカメラ撮影
+- HEIC／HEIF、JPEG、PNG、WebP画像のブラウザ内変換・圧縮
+- 長辺1600px以内への圧縮と、圧縮後ファイルサイズの表示
+- Tesseract.jsによる端末内日本語OCR（画像別結果、結合原文、進捗、キャンセル）
+- OCR原文の編集、手入力、材料候補の再抽出
+- 材料名・数量・単位・補足・グループの確認、追加、削除、除外、並べ替え
+- タイトル、材料、タグ、OCR原文、メモ、出典、実施コメント、改善点の全文検索
+- 完成・訪問・購入写真、5段階評価、コメント、費用、改善点を含む複数回の実施履歴
+- 全画像を含むZIPバックアップ、事前検証、追加取り込み、全置換
+- IndexedDBによる端末内保存、PWAインストール、保存済みデータのオフライン操作
+- iPhone／iPadの縦画面・横画面、ノッチ、ホームインジケータへのセーフエリア対応
+
+現在はレシピ管理を中心に実装していますが、同じデータ構造で店舗と商品も登録できます。
+
+## 対応環境
+
+- 主対象：iOS 17以降のiPhone Safari／ホーム画面Webアプリ
+- 主対象：iPadOS 17以降のiPad mini Safari／ホーム画面Webアプリ
+- 推奨：利用可能な最新のiOS／iPadOSへ更新した端末
+- GitHub Pagesなど、HTTPSで配信されたURL
+
+Safari 17以降のWebKitはHEIC画像の読み込みに対応しています。アプリはSafariのネイティブ読込を最初に試し、失敗した場合だけ無料の `heic-to` を遅延読込して端末内でJPEGへ変換します。[WebKitのSafari 17 HEIC対応情報](https://webkit.org/blog/14445/webkit-features-in-safari-17-0/)
+
+## iPhoneへインストールする方法
+
+専門知識は不要です。GitHub Pagesへの公開が終わったら、次の順に操作してください。
+
+1. iPhoneで青いコンパスの **Safari** アプリを開きます。
+2. GitHub Pagesの公開URLをSafariのアドレス欄へ入力して開きます。
+3. 画面下部またはメニュー内の **共有ボタン**（四角から上向き矢印が出たマーク）をタップします。
+4. 表示された一覧を下へスクロールし、**ホーム画面に追加** をタップします。
+5. 見つからない場合は一番下の **アクションを編集** を開き、**ホーム画面に追加** を追加します。
+6. **Webアプリとして開く** をオンにします。
+7. 右上の **追加** をタップします。
+8. iPhoneのホーム画面へ戻り、追加された **おいしい記録帳** のアイコンをタップします。
+9. Safariのアドレス欄がない、アプリ専用の画面で開けば完了です。
+
+Apple公式手順：[iPhoneのSafariでWebサイトをアプリにする](https://support.apple.com/ja-jp/guide/iphone/iphea86e5236/ios)
+
+## iPad miniへインストールする方法
+
+1. iPad miniで **Safari** を開きます。
+2. GitHub Pagesの公開URLを開きます。
+3. Safari上部の **共有ボタン**（四角から上向き矢印が出たマーク）をタップします。
+4. 必要に応じて **その他** をタップし、**ホーム画面に追加** を選びます。
+5. **Webアプリとして開く** をオンにします。
+6. **追加** をタップします。
+7. ホーム画面に追加された **おいしい記録帳** を開きます。
+
+追加したアイコンは、そのiPad miniにだけ表示されます。iPhone側へ自動追加されることはありません。
+
+Apple公式手順：[iPadのSafariでWebサイトをWebアプリとして開く](https://support.apple.com/guide/ipad/ipad8f1f7a29/ipados)
+
+## 写真アプリから複数のスクリーンショットを登録する
+
+1. アプリ下部の **登録** をタップします。
+2. **写真を複数選ぶ** をタップします。
+3. iPhone／iPadの写真選択画面でスクリーンショットを選びます。
+4. 1回の登録につき最大5枚まで選びます。
+5. **追加** または **完了** をタップします。
+6. アプリへ戻り、各画像のプレビューと圧縮後サイズが表示されることを確認します。
+
+`multiple` 属性を使った複数選択を実装済みですが、実際の写真選択画面の文言や配置はiOS／iPadOSのバージョンによって異なります。
+
+## HEIC／HEIFの処理
+
+1. `.HEIC`／`.HEIF` の拡張子と `image/heic`／`image/heif` MIME型を判定します。
+2. Safari 17以降のネイティブ画像デコーダーで読み込みます。
+3. 読み込めない場合は、`heic-to` のワーカー版を遅延読込します。
+4. 画像を外部送信せず、ブラウザ内でJPEGへ変換します。
+5. 最終的に長辺1600px以内のWebPまたはJPEGへ圧縮してIndexedDBへ保存します。
+
+HEIC変換は5枚を並列処理せず1枚ずつ実行し、iPhone／iPad miniのメモリ負荷を抑えています。変換された画像には登録画面で **HEICから端末内変換** と表示されます。
+
+変換に失敗した場合は、iPhone／iPadの **設定 → カメラ → フォーマット → 互換性優先** で撮影したJPEG、または対象写真のスクリーンショットを使用してください。
+
+## iPhoneとiPad mini間のデータ移行
+
+自動同期機能はありません。例えばiPhoneの記録をiPad miniへ移す場合は、次の順です。
+
+1. iPhone版アプリで **バックアップ** を開きます。
+2. **ZIPを端末に保存** をタップします。
+3. iCloud Driveなど、自分だけがアクセスできる「ファイル」アプリ内の場所へZIPを保存します。
+4. iPad mini版アプリで **バックアップ** を開きます。
+5. 復元ファイルとして保存したZIPを選びます。
+6. 通常は **追加取り込み** を選んで復元します。
+
+この操作は手動コピーです。コピー後にiPhone側を編集しても、iPad mini側へ自動反映されません。
+
+## バックアップと復元
+
+1. 下部ナビゲーションの **バックアップ** を開きます。
+2. **ZIPを端末に保存** をタップします。
+3. Safariのダウンロード表示、または画面に表示される **保存リンクを開く** をタップします。
+4. `oishii-backup-YYYY-MM-DD.zip` を「ファイル」アプリへ保存します。
+
+復元前に、ZIP内の形式、バージョン、件数、関連ID、画像ファイルの有無を検証します。
+
+- **追加取り込み**：現在のデータを残します。重複IDは新しいIDへ振り直します。
+- **全置換**：現在の記録、画像、材料、履歴を削除して置き換えます。
+
+ZIPは暗号化されていません。登録画像やURLを含むため、第三者へ送らないでください。
+
+## データの保存場所と消失リスク
+
+記録は、インストールしたWebアプリのIndexedDB `oishii-archive` に保存します。入力途中の文字情報は同じWebアプリの `localStorage` に保存します。
+
+次の場合はデータが消える可能性があります。
+
+- Safariの履歴とWebサイトデータを削除する
+- ホーム画面Webアプリやサイトデータを削除する
+- iOS／iPadOSが空き容量確保のため保存領域を整理する
+- GitHub Pagesのユーザー名、リポジトリ名、公開URLを変更する
+- プライベートブラウズで利用する
+- 端末を初期化・交換する
+
+永続ストレージ要求がSafariに拒否される場合もあります。少なくとも30日に一度、または大切な記録を追加した直後にZIPバックアップを作成してください。
+
+## OCRの制約
+
+- 初回OCR時にTesseract.jsの日本語／英語学習モデルをダウンロードするため、初回だけ通信が必要です。
+- 一度取得したモデルはService Workerでキャッシュしますが、Safariがキャッシュを削除した場合は再取得が必要です。
+- OCR処理と画像解析は端末内で実行し、選択画像を外部APIへ送信しません。
+- iPhone／iPad miniの空きメモリが少ない場合、複数画像のOCRに時間がかかったりSafariが処理を中断したりする可能性があります。
+- OCR中は画面を消さず、他のアプリへ切り替えないことを推奨します。
+- `1` と `7`、`l` と `1` など意味によって判断が変わる誤読は自動確定せず、編集画面で修正します。
+
+## オフライン利用
+
+- 一度オンラインでアプリ全体とOCRモデルを読み込んだ後は、保存済みデータの閲覧・検索・編集・新規登録をオフラインで利用できます。
+- 初回起動、初回OCR、Safariがキャッシュを削除した後のOCRには通信が必要です。
+- GitHub Pagesの公開URLをSafariで一度開いただけでなく、ホーム画面Webアプリからもオンライン起動しておいてください。
+
+## 画面とセーフエリア対応
+
+- `viewport-fit=cover` と上下左右の `safe-area-inset-*` を使用
+- 下部ナビゲーションはホームインジケータ分の余白を確保
+- iPhoneの登録・実施記録の保存操作は、下部ナビゲーションより上に固定
+- iPhone横画面では上部バーと下部ナビゲーションを低くして作業領域を確保
+- iPad mini縦画面は2列、横画面は広いレイアウトへ自動変更
+- manifestの画面方向は `any` とし、縦横どちらでも起動可能
+
+## 使用技術
+
+| 技術                      | 用途・採用理由                                           |
+| ------------------------- | -------------------------------------------------------- |
+| React + TypeScript + Vite | 静的ホスティングと型安全な画面実装                       |
+| IndexedDB + idb           | Blobを含むデータを各端末のブラウザ内へ保存               |
+| Tesseract.js              | 画像送信なしのブラウザ内OCR                              |
+| heic-to                   | Safariが直接読めないHEIC／HEIFを端末内ワーカーでJPEG化   |
+| MiniSearch                | サーバー不要の日本語部分一致検索                         |
+| JSZip                     | 画像を含むバージョン付きZIPの生成・検証                  |
+| vite-plugin-pwa + Workbox | manifest、Service Worker、オフラインキャッシュ、更新通知 |
+| Vitest                    | 材料抽出、画像形式判定、検索、バックアップ検証           |
+
+外部データベース、有料API、ログイン、広告、アクセス解析、トラッキングは使用していません。
+
+## ローカル起動（Windows PowerShell）
+
+Node.js 22以上をインストールし、PowerShellで実行します。
+
+```powershell
+Set-Location "C:\path\to\recipe-screenshot-pwa"
+npm install
+npm run dev
+```
+
+本番相当のPWAを確認する場合：
+
+```powershell
+npm run build
+npm run preview
+```
+
+ローカルPC上のURLは、そのままではiPhone／iPad miniから安全なHTTPS PWAとして利用できません。実機テストはGitHub Pages公開後に行ってください。
+
+## テストとビルド
+
+```powershell
+npm test
+npm run lint
+npm run build
+```
+
+本番ファイルは `dist` フォルダーへ生成されます。
+
+## GitHub Pagesへ公開
+
+リポジトリには [`.github/workflows/deploy-pages.yml`](.github/workflows/deploy-pages.yml) が含まれます。
+
+1. GitHubで空のリポジトリを作成します。
+2. このプロジェクトを `main` ブランチへpushします。
+3. GitHubのリポジトリで **Settings → Pages** を開きます。
+4. **Build and deployment → Source** を **GitHub Actions** にします。
+5. **Actions** の `Deploy to GitHub Pages` が成功するまで待ちます。
+6. Actions画面またはPages設定に表示された `https://ユーザー名.github.io/リポジトリ名/` を確認します。
+7. そのURLをiPhone／iPad miniのSafariへ入力します。
+
+PowerShellの例です。値は自分のGitHub情報へ置き換えてください。
+
+```powershell
+git add .
+git commit -m "Build iPhone and iPad recipe archive PWA"
+git branch -M main
+git remote add origin "https://github.com/YOUR_NAME/YOUR_REPOSITORY.git"
+git push -u origin main
+```
+
+GitHub Pagesはアプリ本体の静的ファイルだけを配信します。登録後の画像、OCR原文、URL、履歴はGitHubへ送信されません。
+
+## 実機テスト
+
+公開後は [iPhone／iPad mini実機テストチェックリスト](docs/IOS_DEVICE_TEST_CHECKLIST.md) を上から1項目ずつ確認してください。現時点では実機を使用していないため、チェックリストの端末依存項目はすべて **未確認** です。
+
+## 既知の制約
+
+- iPhoneとiPad miniの自動同期はありません。
+- 初回OCRモデル取得前の完全オフライン状態ではOCRできません。
+- HEIC／HEIFはSafari 17以降でネイティブ対応し、失敗時は端末内変換しますが、特殊なHEIFコンテナや破損画像は変換できない場合があります。
+- HEICからJPEG／WebPへ変換すると、EXIFなど元画像のメタデータは保持しません。
+- 大量画像を含むZIPの生成・復元は、端末メモリ不足で失敗する場合があります。
+- バックアップZIPは暗号化されません。
+- Safari／ホーム画面Webアプリの保存上限や削除タイミングはiOS／iPadOSの管理に依存します。
+
+## プライバシー・著作権
+
+- 画像、OCR原文、登録URL、材料、履歴は端末内だけで管理します。
+- OCRモデルの初回取得以外に、登録データを外部へ送信する機能はありません。
+- レシピ画面のスクリーンショットは個人利用の範囲に留め、登録画像やバックアップを第三者へ公開・配布しないでください。
+
+## サードパーティライセンス
+
+HEICフォールバック変換に `heic-to` 1.5.2（LGPL-3.0）を変更せず利用しています。詳細は [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) と[heic-to公式リポジトリ](https://github.com/hoppergee/heic-to)で確認できます。
+
+## ディレクトリ構成
+
+```text
+docs/               iPhone／iPad mini実機テストチェックリスト
+src/
+  components/       共通UIとレイアウト
+  pages/            ホーム、登録、詳細、バックアップ、設定
+  services/         OCR、画像圧縮・HEIC変換、材料抽出、検索、バックアップ
+  db.ts             IndexedDBスキーマと保存操作
+  types.ts          共通データ型
+public/             PWAアイコン
+```
