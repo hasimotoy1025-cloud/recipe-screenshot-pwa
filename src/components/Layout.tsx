@@ -44,7 +44,7 @@ export function Layout({
             <div className="brand-mark">お</div>
           )}
           <div>
-            <p className="eyebrow">MY LOCAL ARCHIVE</p>
+            {route !== 'home' && <p className="eyebrow">MY LOCAL ARCHIVE</p>}
             <h1>{title ?? 'おいしい記録帳'}</h1>
           </div>
           <span className="local-badge" title="画像とデータは端末内だけに保存されます">
