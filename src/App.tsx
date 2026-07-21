@@ -2,10 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRegisterSW } from 'virtual:pwa-register/react';
 import { getSettings, listItemBundles } from './db';
 import type { AppSettings, ItemSummary } from './types';
-import { DEFAULT_SETTINGS } from './types';
+import { DEFAULT_SETTINGS, newId } from './types';
 import { Layout, type RouteName } from './components/Layout';
 import { Toast } from './components/ui';
-import { HomePage } from './pages/HomePage';
+import { HomePage, type ImageSelectionSource } from './pages/HomePage';
 import { EditorPage } from './pages/EditorPage';
 import { DetailPage } from './pages/DetailPage';
 import { BackupPage } from './pages/BackupPage';
@@ -16,6 +16,12 @@ interface Route {
   id?: string;
 }
 
+interface PendingImageSelection {
+  token: string;
+  files: File[];
+  source: ImageSelectionSource;
+}
+
 export function App() {
   const [route, setRoute] = useState<Route>(readRoute);
   const [items, setItems] = useState<ItemSummary[]>([]);
@@ -23,6 +29,9 @@ export function App() {
   const [storageUsage, setStorageUsage] = useState(0);
   const [online, setOnline] = useState(navigator.onLine);
   const [toast, setToast] = useState('');
+  const [pendingImageSelection, setPendingImageSelection] = useState<PendingImageSelection | null>(
+    null
+  );
   const showIosInstallTip = useMemo(() => isAppleMobileDevice() && !isStandaloneWebApp(), []);
   const {
     needRefresh: [needRefresh, setNeedRefresh],
@@ -78,6 +87,24 @@ export function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
+  const createEmptyRecord = useCallback(() => {
+    setPendingImageSelection(null);
+    navigate('new');
+  }, [navigate]);
+
+  const createRecordFromImages = useCallback(
+    (files: File[], source: ImageSelectionSource) => {
+      if (!files.length) return;
+      setPendingImageSelection({ token: newId(), files, source });
+      navigate('new');
+    },
+    [navigate]
+  );
+
+  const releasePendingImages = useCallback((token: string) => {
+    setPendingImageSelection((current) => (current?.token === token ? null : current));
+  }, []);
+
   const title = useMemo(() => {
     if (route.name === 'new') return '新しい記録';
     if (route.name === 'edit') return '記録を編集';
@@ -117,6 +144,8 @@ export function App() {
           settings={settings}
           storageUsage={storageUsage}
           navigate={navigate}
+          onCreateNew={createEmptyRecord}
+          onImagesSelected={createRecordFromImages}
           searchMode={route.name === 'search'}
           showIosInstallTip={showIosInstallTip}
         />
@@ -124,8 +153,14 @@ export function App() {
       {route.name === 'new' && (
         <EditorPage
           settings={settings}
-          onCancel={() => navigate('home')}
+          initialImageSelection={pendingImageSelection}
+          onInitialImagesConsumed={releasePendingImages}
+          onCancel={() => {
+            setPendingImageSelection(null);
+            navigate('home');
+          }}
           onSaved={async (id) => {
+            setPendingImageSelection(null);
             await reload();
             setToast('記録を保存しました。');
             navigate(`item/${id}`);

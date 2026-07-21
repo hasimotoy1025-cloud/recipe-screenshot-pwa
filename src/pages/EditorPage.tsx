@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { getItemBundle, saveItemBundle } from '../db';
 import { formatBytes, compressImage } from '../services/image';
 import { prepareIngredientForSave } from '../services/ingredient';
@@ -44,11 +44,19 @@ const emptyForm: FormState = {
 export function EditorPage({
   itemId: existingId,
   settings,
+  initialImageSelection,
+  onInitialImagesConsumed,
   onSaved,
   onCancel
 }: {
   itemId?: string;
   settings: AppSettings;
+  initialImageSelection?: {
+    token: string;
+    files: File[];
+    source: 'library' | 'camera';
+  } | null;
+  onInitialImagesConsumed?: (token: string) => void;
   onSaved: (id: string) => void;
   onCancel: () => void;
 }) {
@@ -70,6 +78,7 @@ export function EditorPage({
   const [notice, setNotice] = useState('');
   const runnerRef = useRef<OcrRunner | null>(null);
   const objectUrls = useRef(new Set<string>());
+  const consumedImageSelectionTokens = useRef(new Set<string>());
 
   useEffect(() => {
     if (!existingId) return;
@@ -135,50 +144,61 @@ export function EditorPage({
     []
   );
 
-  async function addFiles(fileList: FileList | null) {
-    if (!fileList?.length) return;
-    const remaining = 5 - images.length;
-    if (remaining <= 0) {
-      setError('画像は5枚まで登録できます。');
-      return;
-    }
-    setImageBusy(true);
-    setError('');
-    const next: ImageDraft[] = [];
-    for (const file of Array.from(fileList).slice(0, remaining)) {
-      try {
-        const compressed = await compressImage(file, settings.imageQuality);
-        const previewUrl = URL.createObjectURL(compressed.blob);
-        objectUrls.current.add(previewUrl);
-        next.push({
-          id: newId(),
-          blob: compressed.blob,
-          previewUrl,
-          fileName: replaceExtension(file.name, compressed.blob.type),
-          mimeType: compressed.blob.type,
-          size: compressed.blob.size,
-          originalSize: compressed.originalSize,
-          convertedFromHeic: compressed.convertedFromHeic,
-          crop: null,
-          ocrText: '',
-          ocrStatus: 'idle',
-          ocrLines: []
-        });
-      } catch (reason) {
-        setError(reason instanceof Error ? reason.message : '画像を追加できませんでした。');
+  const addFiles = useCallback(
+    async (fileList: FileList | readonly File[] | null) => {
+      if (!fileList?.length) return;
+      const remaining = 5 - images.length;
+      if (remaining <= 0) {
+        setError('画像は5枚まで登録できます。');
+        return;
       }
-    }
-    setImages((current) => [...current, ...next]);
-    if (next.length) {
-      const heicCount = next.filter((image) => image.convertedFromHeic).length;
-      setNotice(
-        heicCount
-          ? `${next.length}枚を端末内で圧縮しました（HEIC／HEIF ${heicCount}枚を変換）。`
-          : `${next.length}枚の画像を端末内で圧縮しました。`
-      );
-    }
-    setImageBusy(false);
-  }
+      setImageBusy(true);
+      setError('');
+      const next: ImageDraft[] = [];
+      for (const file of Array.from(fileList).slice(0, remaining)) {
+        try {
+          const compressed = await compressImage(file, settings.imageQuality);
+          const previewUrl = URL.createObjectURL(compressed.blob);
+          objectUrls.current.add(previewUrl);
+          next.push({
+            id: newId(),
+            blob: compressed.blob,
+            previewUrl,
+            fileName: replaceExtension(file.name, compressed.blob.type),
+            mimeType: compressed.blob.type,
+            size: compressed.blob.size,
+            originalSize: compressed.originalSize,
+            convertedFromHeic: compressed.convertedFromHeic,
+            crop: null,
+            ocrText: '',
+            ocrStatus: 'idle',
+            ocrLines: []
+          });
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : '画像を追加できませんでした。');
+        }
+      }
+      setImages((current) => [...current, ...next]);
+      if (next.length) {
+        const heicCount = next.filter((image) => image.convertedFromHeic).length;
+        setNotice(
+          heicCount
+            ? `${next.length}枚を端末内で圧縮しました（HEIC／HEIF ${heicCount}枚を変換）。`
+            : `${next.length}枚の画像を端末内で圧縮しました。`
+        );
+      }
+      setImageBusy(false);
+    },
+    [images.length, settings.imageQuality]
+  );
+
+  useEffect(() => {
+    if (existingId || !initialImageSelection) return;
+    const { token, files } = initialImageSelection;
+    if (consumedImageSelectionTokens.current.has(token)) return;
+    consumedImageSelectionTokens.current.add(token);
+    void addFiles(files).finally(() => onInitialImagesConsumed?.(token));
+  }, [addFiles, existingId, initialImageSelection, onInitialImagesConsumed]);
 
   function removeImage(id: string) {
     setImages((current) => {

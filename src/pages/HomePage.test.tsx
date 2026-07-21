@@ -45,6 +45,8 @@ function renderHome({
       settings={settings}
       storageUsage={2 * 1024 * 1024}
       navigate={() => undefined}
+      onCreateNew={() => undefined}
+      onImagesSelected={() => undefined}
       searchMode={searchMode}
       showIosInstallTip={showIosInstallTip}
     />
@@ -136,6 +138,8 @@ describe('HomePage', () => {
           settings={settingsWithoutBackup}
           storageUsage={0}
           navigate={() => undefined}
+          onCreateNew={() => undefined}
+          onImagesSelected={() => undefined}
         />
       </Layout>
     );

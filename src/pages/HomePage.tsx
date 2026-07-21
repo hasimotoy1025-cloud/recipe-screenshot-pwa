@@ -12,12 +12,15 @@ import {
 } from '../components/ui';
 
 type SortKey = 'updated' | 'created' | 'rating';
+export type ImageSelectionSource = 'library' | 'camera';
 
 export function HomePage({
   items,
   settings,
   storageUsage,
   navigate,
+  onCreateNew,
+  onImagesSelected,
   searchMode = false,
   showIosInstallTip = false
 }: {
@@ -25,6 +28,8 @@ export function HomePage({
   settings: AppSettings;
   storageUsage: number;
   navigate: (route: string) => void;
+  onCreateNew: () => void;
+  onImagesSelected: (files: File[], source: ImageSelectionSource) => void;
   searchMode?: boolean;
   showIosInstallTip?: boolean;
 }) {
@@ -59,6 +64,13 @@ export function HomePage({
     ? Math.floor((Date.now() - new Date(settings.lastBackupAt).getTime()) / 86_400_000)
     : null;
 
+  function selectImages(event: React.ChangeEvent<HTMLInputElement>, source: ImageSelectionSource) {
+    const files = Array.from(event.currentTarget.files ?? []);
+    event.currentTarget.value = '';
+    if (!files.length) return;
+    onImagesSelected(files, source);
+  }
+
   return (
     <div className="page home-page">
       {!searchMode && (
@@ -67,9 +79,35 @@ export function HomePage({
             <h2>見つけた味を、すぐ記録。</h2>
             <p>画像から材料を読み取り、端末内に保存できます。</p>
           </div>
-          <button type="button" className="primary large" onClick={() => navigate('new')}>
-            ＋ 新しい記録
-          </button>
+          <div className="home-create-actions">
+            <div className="home-image-actions">
+              <label className="button primary large">
+                スクショ・写真を選ぶ
+                <input
+                  hidden
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  aria-label="スクショ・写真を選ぶ"
+                  onChange={(event) => selectImages(event, 'library')}
+                />
+              </label>
+              <label className="button ghost">
+                撮影する
+                <input
+                  hidden
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  aria-label="撮影する"
+                  onChange={(event) => selectImages(event, 'camera')}
+                />
+              </label>
+            </div>
+            <button type="button" className="home-new-record" onClick={onCreateNew}>
+              ＋ 新しい記録
+            </button>
+          </div>
         </section>
       )}
 

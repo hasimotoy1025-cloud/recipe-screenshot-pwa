@@ -317,6 +317,26 @@ main {
   margin-top: 0;
   flex: 0 0 auto;
 }
+.home-create-actions {
+  display: grid;
+  justify-items: stretch;
+  gap: 0.6rem;
+}
+.home-image-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.55rem;
+}
+.home-new-record {
+  min-height: 42px;
+  border: 0;
+  background: transparent;
+  color: var(--green);
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
 
 .button,
 button.primary,
@@ -1874,6 +1894,14 @@ button.danger {
   .hero-panel .large {
     width: 100%;
     min-width: 0;
+  }
+  .home-image-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+  .home-image-actions .button,
+  .home-new-record {
+    width: 100%;
   }
   .overview-strip {
     width: 100%;
